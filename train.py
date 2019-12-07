@@ -42,26 +42,6 @@ def test_env(env, policy, weights, normalizer=None, path=None):
 	if path is None: return total_reward
 	else: return total_reward, steps
 
-def log_data(env, policy, weights, path, normalizer=None):
-	np.savetxt(path+'.txt', weights)
-	
-	state = env.reset()
-	done = False
-	num_plays = 0.
-	sum_rewards = 0
-	while not done and num_plays < 1000:
-		if normalizer:
-			normalizer.observe(state)
-			state = normalizer.normalize(state)
-		action = policy(state, weights)
-		state, reward, done, _ = env.step(action)
-		reward = max(min(reward, 1), -1)
-
-		sum_rewards += reward
-		num_plays += 1
-	return sum_rewards, num_plays
-
-
 #################### ARS algorithm ####################
 def sort_directions(data, b):
 	reward_p, reward_n = data

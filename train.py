@@ -16,10 +16,11 @@ def policy(state, weights):
 	# weights:	MountainCar (1,2)
 	return np.matmul(weights, state.reshape(-1,1))#.reshape(-1,1)
 
-def test_env(env, policy, weights, normalizer=None):
+def test_env(env, policy, weights, normalizer=None, path=None):
 	# Argument:
 		# env:			Object of the gym environment.
 		# policy:		A function that will take weights, state and returns actions
+	if path: np.savetxt(path+'.txt', weights)		
 	state = env.reset()
 	done = False
 	total_reward = 0.0
@@ -32,20 +33,17 @@ def test_env(env, policy, weights, normalizer=None):
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
 		next_state, reward, done, _ = env.step(action)
+		reward = max(min(reward, 1), -1)
 
 		total_states.append(state)
 		total_reward += reward
 		steps += 1
 		state = next_state
+	if path is None: return total_reward
+	else: return total_reward, steps
 
-	return total_reward
-
-def log_video(env, args, policy, weights, path, normalizer=None):
-	# env = create_env(args.env)
-
-	
-	nb_inputs = env.observation_space.shape[0]
-	nb_outputs = env.action_space.shape[0]
+def log_data(env, policy, weights, path, normalizer=None):
+	np.savetxt(path+'.txt', weights)
 	
 	state = env.reset()
 	done = False
@@ -57,6 +55,8 @@ def log_video(env, args, policy, weights, path, normalizer=None):
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
 		state, reward, done, _ = env.step(action)
+		reward = max(min(reward, 1), -1)
+
 		sum_rewards += reward
 		num_plays += 1
 	return sum_rewards, num_plays
@@ -88,8 +88,11 @@ def update_weights(data, lr, b, weights):
 
 	return weights
 
-def sample_delta(size):
+def sample_delta_normal(size):
 	return np.random.normal(size=size)
+
+def sample_delta(size):
+	return np.random.randn(*size)
 
 
 #################### Normalizing the states #################### 
@@ -119,16 +122,19 @@ class ARS:
 		self.N = args.N
 		self.b = args.b
 		self.lr = args.lr
-		self.env = create_env(args.env)
-		self.env = wrappers.Monitor(self.env, 'exp', force=True)
 		self.args = args
 
-		if not os.path.exists(args.log): os.mkdir(args.log)
+		if not os.path.exists(args.log): 
+			os.mkdir(args.log)
+			os.mkdir(os.path.join(args.log, 'models'))
+			os.mkdir(os.path.join(args.log, 'videos'))
+
+		self.env = create_env(args.env)
+		self.env = wrappers.Monitor(self.env, os.path.join(args.log,'videos'), force=True)
 
 		# For MountainCar -> (1,2)
 		self.size = [self.env.action_space.shape[0], self.env.observation_space.shape[0]]
 		self.weights = np.zeros(self.size)
-		self.threshold_reward = args.threshold_reward
 		if args.normalizer: self.normalizer = Normalizer([1,self.size[1]])
 		else: self.normalizer=None
 
@@ -141,17 +147,16 @@ class ARS:
 		return update_weights([reward_p, reward_n, delta], self.lr, self.b, self.weights)
 
 	def train(self):
-		writer = SummaryWriter('cheetah')
-		# test_reward = test_env(self.env, policy, self.weights, normalizer=self.normalizer)
+		writer = SummaryWriter(self.args.log)
 		print('Training Begins!')
 		counter = 0
-		# while test_reward < self.threshold_reward:
+
 		while counter < 1000:
 			print('Counter: {}'.format(counter))
 			self.weights = self.train_one_epoch()
 
-			path = os.path.join(self.args.log, 'exp'+str(counter))
-			test_reward, num_plays = log_video(self.env, self.args, policy, self.weights, path, normalizer=self.normalizer)
+			path = os.path.join(self.args.log, 'models', 'exp'+str(counter))
+			test_reward, num_plays = test_env(self.env, policy, self.weights, normalizer=self.normalizer, path=path)
 			writer.add_scalar('test_reward', test_reward, counter)
 			writer.add_scalar('episodic_steps', num_plays, counter)
 			print('Iteration: {} and Reward: {}'.format(counter, test_reward))
@@ -167,11 +172,10 @@ class ARS:
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='ARS Parameters')
 	parser.add_argument('--v', type=float, default=0.03, help='noise in delta')
-	parser.add_argument('--N', type=int, default=30, help='No of perturbations')
+	parser.add_argument('--N', type=int, default=16, help='No of perturbations')
 	parser.add_argument('--b', type=int, default=16, help='No of top performing directions')
-	parser.add_argument('--lr', type=float, default=0.1, help='Learning Rate')
-	parser.add_argument('--threshold_reward', type=float, default=92.0, help='threshold_reward')
-	parser.add_argument('--normalizer', type=bool, default=False, help='use normalizer')
+	parser.add_argument('--lr', type=float, default=0.02, help='Learning Rate')
+	parser.add_argument('--normalizer', type=bool, default=True, help='use normalizer')
 	parser.add_argument('--env', type=str, default='HalfCheetahBulletEnv-v0', help='name of environment')
 	parser.add_argument('--log', type=str, default='exp', help='Log folder to store videos')
 

@@ -4,7 +4,7 @@
 
 ### BipedalWalker-v2
 
-![Result Video](https://www.youtube.com/watch?v=oZ55u_Vveao&feature=youtu.be)
+![Result Video](https://github.com/vinits5/augmented-random-search/blob/master/results/results.gif)
 
 Results plot for 100 trials.
 ![plot](https://github.com/vinits5/augmented-random-search/blob/master/results/results.png)

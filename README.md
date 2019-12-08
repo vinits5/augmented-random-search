@@ -4,7 +4,7 @@
 
 ### BipedalWalker-v2
 
-![Result Video](https://github.com/vinits5/augmented-random-search/blob/master/results/openaigym.video.0.27416.video000000.mp4)
+![Result Video](https://www.youtube.com/watch?v=oZ55u_Vveao&feature=youtu.be)
 
 Results plot for 100 trials.
 ![plot](https://github.com/vinits5/augmented-random-search/blob/master/results/results.png)

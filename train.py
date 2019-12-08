@@ -16,11 +16,10 @@ def policy(state, weights):
 	# weights:	MountainCar (1,2)
 	return np.matmul(weights, state.reshape(-1,1))#.reshape(-1,1)
 
-def test_env(env, policy, weights, normalizer=None, path=None):
+def test_env(env, policy, weights, normalizer=None, eval_policy=False):
 	# Argument:
 		# env:			Object of the gym environment.
 		# policy:		A function that will take weights, state and returns actions
-	if path: np.savetxt(path+'.txt', weights)		
 	state = env.reset()
 	done = False
 	total_reward = 0.0
@@ -33,14 +32,14 @@ def test_env(env, policy, weights, normalizer=None, path=None):
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
 		next_state, reward, done, _ = env.step(action)
-		reward = max(min(reward, 1), -1)
+		# reward = max(min(reward, 1), -1)
 
 		total_states.append(state)
 		total_reward += reward
 		steps += 1
 		state = next_state
-	if path is None: return total_reward
-	else: return total_reward, steps
+	if eval_policy: return float(total_reward), steps
+	else: return float(total_reward)
 
 #################### ARS algorithm ####################
 def sort_directions(data, b):
@@ -74,7 +73,6 @@ def sample_delta_normal(size):
 def sample_delta(size):
 	return np.random.randn(*size)
 
-
 #################### Normalizing the states #################### 
 class Normalizer():
 	def __init__(self, nb_inputs):
@@ -95,6 +93,10 @@ class Normalizer():
 		obs_std = np.sqrt(self.var)
 		return (inputs - obs_mean) / obs_std
 
+	def store(self, path):
+		np.savetxt(os.path.join(path, 'mean.txt'), self.mean)
+		np.savetxt(os.path.join(path, 'var.txt'), self.var)
+
 #################### Training ARS Class #################### 
 class ARS:
 	def __init__(self, args):
@@ -110,13 +112,19 @@ class ARS:
 			os.mkdir(os.path.join(args.log, 'videos'))
 
 		self.env = create_env(args.env)
-		self.env = wrappers.Monitor(self.env, os.path.join(args.log,'videos'), force=True)
+		#self.env = wrappers.Monitor(self.env, os.path.join(args.log,'videos'), force=True)
 
 		# For MountainCar -> (1,2)
 		self.size = [self.env.action_space.shape[0], self.env.observation_space.shape[0]]
 		self.weights = np.zeros(self.size)
 		if args.normalizer: self.normalizer = Normalizer([1,self.size[1]])
 		else: self.normalizer=None
+
+	def save_policy(self, counter):
+		path = os.path.join(self.args.log, 'models', 'policy'+str(counter))
+		if not os.path.exists(path): os.mkdir(path)
+		np.savetxt(os.path.join(path, 'weights.txt'), self.weights)
+		self.normalizer.store(path)
 
 	def train_one_epoch(self):
 		delta = [sample_delta(self.size) for _ in range(self.N)]
@@ -131,12 +139,12 @@ class ARS:
 		print('Training Begins!')
 		counter = 0
 
-		while counter < 1000:
+		while counter < 10000:
 			print('Counter: {}'.format(counter))
 			self.weights = self.train_one_epoch()
 
-			path = os.path.join(self.args.log, 'models', 'exp'+str(counter))
-			test_reward, num_plays = test_env(self.env, policy, self.weights, normalizer=self.normalizer, path=path)
+			test_reward, num_plays = test_env(self.env, policy, self.weights, normalizer=self.normalizer, eval_policy=True)
+			self.save_policy(counter)
 			writer.add_scalar('test_reward', test_reward, counter)
 			writer.add_scalar('episodic_steps', num_plays, counter)
 			print('Iteration: {} and Reward: {}'.format(counter, test_reward))
@@ -144,8 +152,7 @@ class ARS:
 
 		counter = 0		
 		while True:
-			path = os.path.join(self.args.log, 'test'+str(counter))
-			print(test_env(self.args, policy, self.weights, path, normalizer=self.normalizer))
+			print(test_env(self.args, policy, self.weights, normalizer=self.normalizer))
 			counter += 1
 
 
@@ -156,8 +163,8 @@ if __name__ == '__main__':
 	parser.add_argument('--b', type=int, default=16, help='No of top performing directions')
 	parser.add_argument('--lr', type=float, default=0.02, help='Learning Rate')
 	parser.add_argument('--normalizer', type=bool, default=True, help='use normalizer')
-	parser.add_argument('--env', type=str, default='HalfCheetahBulletEnv-v0', help='name of environment')
-	parser.add_argument('--log', type=str, default='exp', help='Log folder to store videos')
+	parser.add_argument('--env', type=str, default='BipedalWalker-v2', help='name of environment')
+	parser.add_argument('--log', type=str, default='exp_biped_test', help='Log folder to store videos')
 
 	args = parser.parse_args()
 	ars = ARS(args)

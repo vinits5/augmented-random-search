@@ -12,9 +12,7 @@ def create_env(env_name):
 	return env
 
 def policy(state, weights):
-	# state: 	MountainCar (2,1)
-	# weights:	MountainCar (1,2)
-	return np.matmul(weights, state.reshape(-1,1))#.reshape(-1,1)
+	return np.matmul(weights, state.reshape(-1,1))
 
 def test_env(env, policy, weights, normalizer=None, eval_policy=False):
 	# Argument:
@@ -26,13 +24,17 @@ def test_env(env, policy, weights, normalizer=None, eval_policy=False):
 	total_states = []
 	steps = 0
 
-	while not done and steps<1000:
+	while not done and steps<5000:
 		if normalizer:
-			normalizer.observe(state)
+			if not eval_policy: normalizer.observe(state)
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
 		next_state, reward, done, _ = env.step(action)
-		# reward = max(min(reward, 1), -1)
+
+		# Trick to avoid local optima.
+		if abs(next_state[2]) < 0.001:
+			reward = -100
+			done = True
 
 		total_states.append(state)
 		total_reward += reward
@@ -114,7 +116,6 @@ class ARS:
 		self.env = create_env(args.env)
 		#self.env = wrappers.Monitor(self.env, os.path.join(args.log,'videos'), force=True)
 
-		# For MountainCar -> (1,2)
 		self.size = [self.env.action_space.shape[0], self.env.observation_space.shape[0]]
 		self.weights = np.zeros(self.size)
 		if args.normalizer: self.normalizer = Normalizer([1,self.size[1]])
@@ -164,7 +165,7 @@ if __name__ == '__main__':
 	parser.add_argument('--lr', type=float, default=0.02, help='Learning Rate')
 	parser.add_argument('--normalizer', type=bool, default=True, help='use normalizer')
 	parser.add_argument('--env', type=str, default='BipedalWalker-v2', help='name of environment')
-	parser.add_argument('--log', type=str, default='exp_biped_test', help='Log folder to store videos')
+	parser.add_argument('--log', type=str, default='exp_biped_5', help='Log folder to store videos')
 
 	args = parser.parse_args()
 	ars = ARS(args)

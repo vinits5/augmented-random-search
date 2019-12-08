@@ -12,8 +12,6 @@ def create_env(env_name):
 	return env
 
 def policy(state, weights):
-	# state: 	MountainCar (2,1)
-	# weights:	MountainCar (1,2)
 	return np.matmul(weights, state.reshape(-1,1))#.reshape(-1,1)
 
 def test_env(env, policy, weights, normalizer=None, path=None):
@@ -32,12 +30,6 @@ def test_env(env, policy, weights, normalizer=None, path=None):
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
 		next_state, reward, done, _ = env.step(action)
-		#if abs(next_state[2]) < 0.0001*10:
-		#	reward = -100
-		#	done = True
-		print(next_state[2], reward, done)
-		# reward = max(min(reward, 1), -1)
-		#env.render()	
 
 		total_states.append(state)
 		total_reward += reward
@@ -63,12 +55,27 @@ class Normalizer():
 		return (inputs - obs_mean) / obs_std
 
 if __name__ == '__main__':
-	idx = int(sys.argv[1])
-	path = os.path.join('exp_biped_2', 'models', 'policy'+str(idx))
+	#idx = int(sys.argv[1])
+	idx = 910
+	path = os.path.join('results', 'policy'+str(idx))
 	weights = np.loadtxt(os.path.join(path, 'weights.txt'))
 	env = create_env('BipedalWalker-v2')
-	env = wrappers.Monitor(env, 'videos', force=True)
 	normalizer = Normalizer([1, env.observation_space.shape[0]])
 	normalizer.restore(path)
 
-	test_env(env, policy, weights, normalizer=normalizer)
+
+	rewards = [test_env(env, policy, weights, normalizer=normalizer) for _ in range(100)]
+	np.savetxt('avg_reward.txt', rewards)
+	print("Mean of 100 trials: ",sum(rewards)/100.0)
+
+	rewards = np.array(rewards).reshape(1,-1)
+
+	import matplotlib.pyplot as plt
+	print('Mean of 100 trials: ', np.mean(rewards))
+	plt.plot(rewards[0], linewidth=3)
+	plt.title('BipedalWalker-v2 (ARS Tests)', fontsize=30)
+	plt.xlabel('No of Trials', fontsize=30)
+	plt.ylabel('Reward per Trial', fontsize=30)
+	plt.tick_params(labelsize=20, width=3, length=10)
+	plt.axhline(y=np.mean(rewards), linestyle='--', linewidth=3, color='r')
+	plt.show()

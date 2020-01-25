@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 import argparse
-import pybullet_envs
+# import pybullet_envs
 from gym import wrappers
 import os
 from tensorboardX import SummaryWriter
@@ -11,8 +11,12 @@ def create_env(env_name):
 	env = gym.make(env_name)
 	return env
 
+def softmax(inputs):
+	return np.exp(inputs) / float(sum(np.exp(inputs)))
+
 def policy(state, weights):
-	return np.matmul(weights, state.reshape(-1,1))
+	probabilities = np.matmul(weights, state.reshape(-1,1))
+	return np.argmax(softmax(probabilities))
 
 def test_env(env, policy, weights, normalizer=None, eval_policy=False):
 	# Argument:
@@ -24,17 +28,19 @@ def test_env(env, policy, weights, normalizer=None, eval_policy=False):
 	total_states = []
 	steps = 0
 
-	while not done and steps<5000:
+	while not done and steps<1000:
 		if normalizer:
 			if not eval_policy: normalizer.observe(state)
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
 		next_state, reward, done, _ = env.step(action)
+		# env.render()
 
-		# Trick to avoid local optima.
-		if abs(next_state[2]) < 0.001:
-			reward = -100
-			done = True
+		# reward = -abs(next_state[2])*(180/np.pi)
+		# # Trick to avoid local optima.
+		# if abs(next_state[2]) < 0.001:
+		# 	reward = -100
+		# 	done = True
 
 		total_states.append(state)
 		total_reward += reward
@@ -61,13 +67,20 @@ def update_weights(data, lr, b, weights):
 	idx = sort_directions([reward_p, reward_n], b)
 
 	step = np.zeros(weights.shape)
+	# print("Reward Positive: ",reward_p)
+	# print("Reward Negative: ",reward_n)
 	for i in range(b):
 		step += [reward_p[idx[i]] - reward_n[idx[i]]]*delta[idx[i]]
+	# print("Step: ", step)
 
 	sigmaR = np.std(np.array(reward_p)[idx][:b] + np.array(reward_n)[idx][:b])
+	end_training = False
+	if sigmaR == 0: 
+		sigmaR = 1
+		end_training = True
 	weights += (lr*1.0)/(b*sigmaR*1.0)*step
 
-	return weights
+	return weights, end_training
 
 def sample_delta_normal(size):
 	return np.random.normal(size=size)
@@ -112,12 +125,14 @@ class ARS:
 			os.mkdir(args.log)
 			os.mkdir(os.path.join(args.log, 'models'))
 			os.mkdir(os.path.join(args.log, 'videos'))
+			os.system('cp train.py %s'%(args.log))
 
 		self.env = create_env(args.env)
-		#self.env = wrappers.Monitor(self.env, os.path.join(args.log,'videos'), force=True)
+		# self.env = wrappers.Monitor(self.env, os.path.join(args.log,'videos'), force=True)
 
-		self.size = [self.env.action_space.shape[0], self.env.observation_space.shape[0]]
-		self.weights = np.zeros(self.size)
+		self.size = [4, self.env.observation_space.shape[0]]
+		# self.weights = np.ones(self.size)
+		self.weights = np.random.random_sample(self.size)
 		if args.normalizer: self.normalizer = Normalizer([1,self.size[1]])
 		else: self.normalizer=None
 
@@ -142,7 +157,7 @@ class ARS:
 
 		while counter < 10000:
 			print('Counter: {}'.format(counter))
-			self.weights = self.train_one_epoch()
+			self.weights, end_training = self.train_one_epoch()
 
 			test_reward, num_plays = test_env(self.env, policy, self.weights, normalizer=self.normalizer, eval_policy=True)
 			self.save_policy(counter)
@@ -150,6 +165,10 @@ class ARS:
 			writer.add_scalar('episodic_steps', num_plays, counter)
 			print('Iteration: {} and Reward: {}'.format(counter, test_reward))
 			counter += 1
+			if end_training:
+				print('Total Epochs: ', counter)
+				self.env.close()
+				break
 
 		counter = 0		
 		while True:
@@ -160,13 +179,14 @@ class ARS:
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='ARS Parameters')
 	parser.add_argument('--v', type=float, default=0.03, help='noise in delta')
-	parser.add_argument('--N', type=int, default=16, help='No of perturbations')
-	parser.add_argument('--b', type=int, default=16, help='No of top performing directions')
+	parser.add_argument('--N', type=int, default=30, help='No of perturbations')
+	parser.add_argument('--b', type=int, default=20, help='No of top performing directions')
 	parser.add_argument('--lr', type=float, default=0.02, help='Learning Rate')
 	parser.add_argument('--normalizer', type=bool, default=True, help='use normalizer')
-	parser.add_argument('--env', type=str, default='BipedalWalker-v2', help='name of environment')
-	parser.add_argument('--log', type=str, default='exp_biped_5', help='Log folder to store videos')
+	parser.add_argument('--env', type=str, default='LunarLander-v2', help='name of environment')
+	parser.add_argument('--log', type=str, default='exp_lunarLander', help='Log folder to store videos')
 
 	args = parser.parse_args()
+	args.log = os.path.join(args.log)
 	ars = ARS(args)
 	ars.train()

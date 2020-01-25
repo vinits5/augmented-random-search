@@ -11,10 +11,14 @@ def create_env(env_name):
 	env = gym.make(env_name)
 	return env
 
+def softmax(inputs):
+	return np.exp(inputs) / float(sum(np.exp(inputs)))
+
 def policy(state, weights):
 	# state: 	MountainCar (2,1)
 	# weights:	MountainCar (1,2)
-	return np.matmul(weights, state.reshape(-1,1))#.reshape(-1,1)
+	probabilities = np.matmul(weights, state.reshape(-1,1))
+	return np.argmax(softmax(probabilities))
 
 def test_env(env, policy, weights, normalizer=None, path=None):
 	# Argument:
@@ -27,7 +31,7 @@ def test_env(env, policy, weights, normalizer=None, path=None):
 	total_states = []
 	steps = 0
 
-	while not done and steps<5000:
+	while not done and steps<500:
 		if normalizer:
 			state = normalizer.normalize(state)
 		action = policy(state, weights)
@@ -35,17 +39,17 @@ def test_env(env, policy, weights, normalizer=None, path=None):
 		#if abs(next_state[2]) < 0.0001*10:
 		#	reward = -100
 		#	done = True
-		print(next_state[2], reward, done)
+		print(reward, done, action)
 		# reward = max(min(reward, 1), -1)
-		#env.render()	
+		env.render()
+		time.sleep(0.1)
 
 		total_states.append(state)
 		total_reward += reward
 		steps += 1
 		state = next_state
+	env.close()
 	print(float(total_reward), steps)
-	if path is None: return float(total_reward)
-	else: return float(total_reward), steps
 
 #################### Normalizing the states #################### 
 class Normalizer():
@@ -64,10 +68,10 @@ class Normalizer():
 
 if __name__ == '__main__':
 	idx = int(sys.argv[1])
-	path = os.path.join('exp_biped_2', 'models', 'policy'+str(idx))
+	path = os.path.join('exp_lunarLander', 'models', 'policy'+str(idx))
 	weights = np.loadtxt(os.path.join(path, 'weights.txt'))
-	env = create_env('BipedalWalker-v2')
-	env = wrappers.Monitor(env, 'videos', force=True)
+	env = create_env('LunarLander-v2')
+	# env = wrappers.Monitor(env, 'videos', force=True)
 	normalizer = Normalizer([1, env.observation_space.shape[0]])
 	normalizer.restore(path)
 
